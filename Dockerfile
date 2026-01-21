@@ -4,6 +4,10 @@ FROM node:22
 # Set the working directory inside the container
 WORKDIR /app
 
+# Runtime environment variables (IMPORTANT)
+ENV PORT=5000
+ENV HOST=0.0.0.0
+
 RUN npm install -g pnpm
 
 # Copy the package.json and pnpm-lock.yaml to install dependencies
