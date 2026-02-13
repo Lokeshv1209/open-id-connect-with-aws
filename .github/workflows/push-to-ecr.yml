@@ -15,7 +15,9 @@ jobs:
       contents: read
 
     env:
-      AWS_REGION: ap-south-1
+      # AWS_REGION: ap-south-1
+      # ECR_REPOSITORY: demo/lfb
+      AWS_REGION: us-east-1
       ECR_REPOSITORY: demo/lfb
       AWS_ACCOUNT_ID: 202279973546
 
