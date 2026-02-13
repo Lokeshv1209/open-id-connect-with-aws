@@ -164,3 +164,149 @@ App bound to localhost	Connection refused
 Wrong container port	App unreachable
 Command override	Task exits
 No public IP	Cannot access
+
+
+
+
+**Steps to deploy app into eks using the service load balancer**
+EKS Production Setup — Phase 1 (Foundation)
+
+Create a production-ready EKS cluster with:
+Custom VPC
+Public + private subnets
+NAT + IGW
+EKS cluster
+Node group
+ECR integration
+App deployment
+
+Region used: us-east-1
+
+🧱 1. Create VPC
+CIDR: 10.0.0.0/16
+Go: VPC → Create VPC → VPC only
+Name: eks-vpc
+
+🌐 2. Create Subnets
+Create 4 subnets:
+
+Public subnets
+10.0.1.0/24  (AZ-a)
+10.0.3.0/24  (AZ-b)
+
+Private subnets
+10.0.2.0/24  (AZ-a)
+10.0.4.0/24  (AZ-b)
+
+Why 2 AZ?
+Production HA.
+
+🌍 3. Internet Gateway
+Create IGW:
+eks-igw
+Attach to VPC.
+
+📡 4. Public Route Table
+Create: eks-public-rt
+Add route: 0.0.0.0/0 → IGW
+Associate: public subnets
+
+🔐 5. NAT Gateway
+Create in public subnet: eks-nat
+Allocate Elastic IP.
+Wait until: Available
+
+🧭 6. Private Route Table
+Create: eks-private-rt
+Add route: 0.0.0.0/0 → NAT
+Associate: 
+private subnets
+
+🏷 7. Tag Subnets for EKS
+Public subnets
+kubernetes.io/cluster/eks-cluster-oidc = shared
+kubernetes.io/role/elb = 1
+
+Private subnets
+kubernetes.io/cluster/eks-cluster-oidc = shared
+kubernetes.io/role/internal-elb = 1
+
+This allows:
+Load balancers
+Node networking
+
+🔑 8. IAM Roles
+Cluster role () (we can reuseif we already have this: AmazonEKSAutoClusterRole for any new cluster in same account.)
+Name: AmazonEKSAutoClusterRole
+Policies: AmazonEKSClusterPolicy
+
+Node role
+Name: eksNodeRole
+Policies: 
+AmazonEKSWorkerNodePolicy
+AmazonEKS_CNI_Policy
+AmazonEC2ContainerRegistryReadOnly
+
+☸️ 9. Create EKS Cluster
+Type: Custom configuration
+Cluster name: eks-cluster-oidc
+Region: us-east-1
+Select: VPC
+all 4 subnets
+public + private endpoint
+Wait until:
+Status: Active
+
+🖥 10. Create Node Group
+Name: eks-ng-oidc
+Instance: t3.medium
+Nodes: 
+min: 1
+desired: 2
+max: 2
+
+Subnets: PRIVATE subnets only
+Wait until: Active
+Check: kubectl get nodes
+
+📦 11. Create ECR Repo
+Region: us-east-1
+Repo: demo/lfb
+
+🔐 12. GitHub OIDC for ECR
+IAM role: GitHubActions-ECR-Push
+Policy: AmazonEC2ContainerRegistryFullAccess
+Used by GitHub to push images.
+
+🚀 13. Deploy App (Manual Validation)
+Deployment:
+
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+
+Service type: LoadBalancer
+
+This auto creates AWS LB.
+
+Traffic flow:
+
+Internet
+ → AWS ELB
+ → NodePort
+ → Pod
+ → Container:5000
+
+🧪 Validation Commands
+Check nodes: kubectl get nodes
+Check pods: kubectl get pods
+Check svc: kubectl get svc
+Check logs: kubectl logs -l app=lfb
+
+🟢 Phase-1 Completed
+You now have:
+Production VPC
+Secure private nodes
+NAT networking
+ECR integration
+EKS cluster
+Running app
