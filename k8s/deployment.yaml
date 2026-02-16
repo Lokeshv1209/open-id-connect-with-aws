@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lfb
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lfb
+  template:
+    metadata:
+      labels:
+        app: lfb
+    spec:
+      containers:
+      - name: lfb
+        image: 202279973546.dkr.ecr.us-east-1.amazonaws.com/demo/lfb:PLACEHOLDER_TAG
+        ports:
+        - containerPort: 5000
+        imagePullPolicy: Always
