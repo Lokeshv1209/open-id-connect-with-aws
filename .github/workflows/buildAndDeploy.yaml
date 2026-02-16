@@ -3,7 +3,8 @@ name: Build and Deploy to EKS
 on:
   push:
     branches:
-      - main
+      - "*"           # build for all branches (good for testing PRs)
+  workflow_dispatch:
 
 permissions:
   id-token: write
