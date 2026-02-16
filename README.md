@@ -310,3 +310,230 @@ NAT networking
 ECR integration
 EKS cluster
 Running app
+
+
+**Steps to deploy app into EKS + CI/CD (Production-grade OIDC deployment) using the service load balancer**
+This phase covers:
+
+EKS cluster deployment
+Node group creation
+Private networking
+ECR integration
+GitHub OIDC authentication
+CI/CD pipeline (build + deploy)
+Automatic rollout to cluster
+
+🧭 Architecture
+GitHub push
+   ↓
+GitHub Actions
+   ↓ OIDC
+AWS IAM Role
+   ↓
+ECR (image push)
+   ↓
+EKS cluster
+   ↓
+Kubernetes deployment
+   ↓
+ALB LoadBalancer → Internet
+
+🏗 1. Create ECR repository
+Region: same as EKS cluster (important)
+Example: us-east-1
+Repository name: demo/lfb
+Full URI: 202279973546.dkr.ecr.us-east-1.amazonaws.com/demo/lfb
+
+🔐 2. Create GitHub OIDC provider (AWS)
+AWS Console → IAM → Identity Providers → Add provider
+Provider type: OpenID Connect
+URL: https://token.actions.githubusercontent.com
+Audience: sts.amazonaws.com
+
+🔑 3. IAM role for GitHub → ECR push
+Create role: GitHubActions-ECR-Push
+Trusted entity: Web identity
+Provider: token.actions.githubusercontent.com
+Condition:
+"StringLike": {
+  "token.actions.githubusercontent.com:sub": "repo:Lokeshv1209/open-id-connect-with-aws:*"
+}
+Attach policies: AmazonEC2ContainerRegistryFullAccess
+
+🔑 4. IAM role for GitHub → EKS deploy
+Create role: GitHubActions-EKS-Autodeploy
+Attach policies: AmazonEKSClusterPolicy, AmazonEC2ContainerRegistryReadOnly
+Trust policy:
+{
+ "Effect": "Allow",
+ "Principal": {
+   "Federated": "arn:aws:iam::202279973546:oidc-provider/token.actions.githubusercontent.com"
+ },
+ "Action": "sts:AssumeRoleWithWebIdentity",
+ "Condition": {
+   "StringLike": {
+     "token.actions.githubusercontent.com:sub": "repo:Lokeshv1209/open-id-connect-with-aws:*"
+   }
+ }
+}
+
+🔐 5. Grant role access to EKS (NEW METHOD)
+EKS → Cluster → Access → Create access entry
+IAM principal: GitHubActions-EKS-Autodeploy
+Attach policy: AmazonEKSAdminPolicy
+Scope: Cluster
+This replaces old aws-auth configmap.
+
+🐳 6. GitHub build and deploy pipeline (CI/CD)
+.github/workflows/buildAndDeploy.yaml
+name: Build and Deploy to EKS
+
+on:
+  push:
+    branches:
+      - "*"           # build for all branches (good for testing PRs)
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: demo/lfb
+  AWS_ACCOUNT_ID: 202279973546
+  CLUSTER_NAME: eks-cluster-oidc
+
+jobs:
+
+# ---------------- BUILD ----------------
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image_uri: ${{ steps.build.outputs.image_uri }}
+      image_tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::202279973546:role/GitHubActions-ECR-Push
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Generate SHA tag
+        id: meta
+        run: echo "tag=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push image
+        id: build
+        run: |
+          IMAGE_TAG="${{ steps.meta.outputs.tag }}"
+          IMAGE_URI="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}"
+
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+
+          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+# ---------------- DEPLOY ----------------
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::202279973546:role/GitHubActions-EKS-Autodeploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $CLUSTER_NAME
+
+      - name: Deploy exact image
+        run: |
+          IMAGE_URI="${{ needs.build.outputs.image_uri }}"
+
+          kubectl set image deployment/lfb \
+            lfb=$IMAGE_URI \
+            --record
+
+          kubectl rollout status deployment/lfb
+
+📦 8. Kubernetes deployment
+
+k8s/deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lfb
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lfb
+  template:
+    metadata:
+      labels:
+        app: lfb
+    spec:
+      containers:
+      - name: lfb
+        image: 202279973546.dkr.ecr.us-east-1.amazonaws.com/demo/lfb:PLACEHOLDER_TAG
+        ports:
+        - containerPort: 5000
+
+🌐 9. Service
+
+k8s/service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: lfb-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: lfb
+  ports:
+    - port: 80
+      targetPort: 5000
+
+
+AWS automatically creates ELB.
+
+🔁 Deployment flow
+git push main
+   ↓
+GitHub build image
+   ↓
+Push to ECR
+   ↓
+GitHub deploy job
+   ↓
+kubectl set image
+   ↓
+rolling update
+
+🧪 Test commands
+kubectl get pods
+kubectl get svc
+kubectl describe pod
+
+🔐 Security achieved
+
+✔ No AWS access keys
+✔ OIDC authentication
+✔ IAM role trust
+✔ private nodes
+✔ NAT outbound only
+✔ rolling updates
+✔ commit SHA versioning
