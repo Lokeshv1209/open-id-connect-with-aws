@@ -7,7 +7,7 @@ import LoginDesign2 from "@/../public/LoginDesign2.svg";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative overflow-hidden bg-gradient-to-br from-[#2FDD92] to-[#2F86A6] ">
+    <div className="relative overflow-hidden bg-blue-800">
       <main className=" ">{children}</main>
       <Image className="absolute top-0 left-0 w-36" src={LoginDesign1} alt="" />
       <Image className="absolute left-0 bottom-2 w-36" src={LoginDesign2} alt="" />
