@@ -406,7 +406,7 @@ env:
 
 jobs:
 
-# ---------------- BUILD ----------------
+---------------- BUILD ----------------
   build:
     runs-on: ubuntu-latest
     outputs:
@@ -438,7 +438,7 @@ jobs:
 
           echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
-# ---------------- DEPLOY ----------------
+---------------- DEPLOY ----------------
   deploy:
     runs-on: ubuntu-latest
     needs: build
@@ -537,3 +537,44 @@ kubectl describe pod
 ✔ NAT outbound only
 ✔ rolling updates
 ✔ commit SHA versioning
+
+
+**Rollout**
+
+Check current Pods
+kubectl get pods
+
+Example output:
+lfb-57455d8d99-5rtlh   1/1   Running   0   22m
+lfb-57455d8d99-rslgr   1/1   Running   0   23m
+
+2️⃣ Check current image
+kubectl get deployment lfb -o=jsonpath='{.spec.template.spec.containers[*].image}'
+
+Output:
+202279973546.dkr.ecr.us-east-1.amazonaws.com/demo/lfb:83b5fcb2
+
+3️⃣ View rollout history
+kubectl rollout history deployment lfb
+
+Example:
+REVISION  CHANGE-CAUSE
+1         <none>
+...
+7         kubectl set image ...:01ab46a6 --record=true
+8         kubectl set image ...:83b5fcb2 --record=true
+
+4️⃣ Rollback to a previous revision
+Rollback to Revision 7 (image 01ab46a6):
+kubectl rollout undo deployment lfb --to-revision=7
+
+Check rollout status: kubectl rollout status deployment lfb
+
+Confirm the image: kubectl get deployment lfb -o=jsonpath='{.spec.template.spec.containers[*].image}'
+
+Output: 202279973546.dkr.ecr.us-east-1.amazonaws.com/demo/lfb:01ab46a6
+
+5️⃣ Rollback to Revision 8 (image 83b5fcb2) if needed
+kubectl rollout undo deployment lfb --to-revision=8
+kubectl rollout status deployment lfb
+kubectl get deployment lfb -o=jsonpath='{.spec.template.spec.containers[*].image}'
