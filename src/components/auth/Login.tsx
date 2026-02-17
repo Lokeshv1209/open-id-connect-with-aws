@@ -105,7 +105,7 @@ function Login() {
     <div className="p-6 flex justify-center  items-center bg-cover bg-center h-screen">
       <div className="w-md z-10">
         <div className="text-white">
-          <h1 className="text-2xl font-bold py-2 ">Welcome Back UI</h1>
+          <h1 className="text-2xl font-bold py-2 ">UI Welcome's you</h1>
           <p className="font-semibold text-sm">
             Connect, share, and grow with your organization in a simple, distraction-free space.
           </p>
