@@ -18,3 +18,22 @@ spec:
         ports:
         - containerPort: 5000
         imagePullPolicy: Always
+        # Readiness probe (controls rollout success)
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+
+        # Liveness probe (restarts container if dead)
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
