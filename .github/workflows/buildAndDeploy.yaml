@@ -15,6 +15,7 @@ env:
   ECR_REPOSITORY: demo/lfb
   AWS_ACCOUNT_ID: 202279973546
   CLUSTER_NAME: eks-cluster-oidc
+  NAMESPACE: production
 
 jobs:
 
