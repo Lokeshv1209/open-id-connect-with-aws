@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: lfb
-        image: 202279973546.dkr.ecr.us-east-1.amazonaws.com/demo/lfb:PLACEHOLDER_TAG
+        image: IMAGE_PLACEHOLDER
         ports:
         - containerPort: 5000
         imagePullPolicy: Always
