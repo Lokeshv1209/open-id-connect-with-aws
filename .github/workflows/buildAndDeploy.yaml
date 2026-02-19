@@ -69,12 +69,15 @@ jobs:
             --region $AWS_REGION \
             --name $CLUSTER_NAME
 
-      - name: Deploy exact image
+      - name: Inject image and deploy
         run: |
           IMAGE_URI="${{ needs.build.outputs.image_uri }}"
 
-          kubectl set image deployment/lfb \
-            lfb=$IMAGE_URI \
-            --record
+          sed "s|IMAGE_PLACEHOLDER|$IMAGE_URI|g" k8s/deployment.yaml | kubectl apply -f -
 
-          kubectl rollout status deployment/lfb
+          kubectl apply -f k8s/service.yaml
+          kubectl apply -f k8s/ingress.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/lfb -n $NAMESPACE --timeout=180s
