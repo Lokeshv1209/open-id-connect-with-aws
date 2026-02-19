@@ -1,4 +1,19 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: production
+# Production Best Practice
+
+# In production:
+# CI/CD pipelines should NOT create namespaces dynamically.
+
+# Namespaces are:
+# Environment boundaries
+# Security boundaries
+# Created by cluster admin
+# Created once
+
+# Create namespace ONCE manually (or via admin pipeline)
+# Run this once from your admin user:
+# kubectl create namespace production
+
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: production

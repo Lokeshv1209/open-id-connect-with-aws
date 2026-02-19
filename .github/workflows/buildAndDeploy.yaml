@@ -73,8 +73,6 @@ jobs:
       - name: Inject image and deploy
         run: |
           IMAGE_URI="${{ needs.build.outputs.image_uri }}"
-          
-          kubectl apply -f k8s/namespace.yaml
 
           sed "s|IMAGE_PLACEHOLDER|$IMAGE_URI|g" k8s/deployment.yaml | kubectl apply -f -
 
