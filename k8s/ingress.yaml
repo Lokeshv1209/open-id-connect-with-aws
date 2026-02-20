@@ -8,8 +8,8 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: lfb.local
-    http:
+  # - host: lfb.local
+  -  http:
       paths:
       - path: /
         pathType: Prefix
