@@ -578,3 +578,109 @@ Output: 202279973546.dkr.ecr.us-east-1.amazonaws.com/demo/lfb:01ab46a6
 kubectl rollout undo deployment lfb --to-revision=8
 kubectl rollout status deployment lfb
 kubectl get deployment lfb -o=jsonpath='{.spec.template.spec.containers[*].image}'
+
+
+
+
+**Nginx ingress controller steup**
+NGINX Ingress Controller Setup on EKS
+1️⃣ Prerequisites
+
+Make sure:
+EKS cluster is running
+kubectl is configured
+You have cluster-admin access
+IAM OIDC configured (already done in your case)
+Verify cluster access: kubectl get nodes
+
+2️⃣ Install Helm (if not installed)
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+Verify: helm version
+
+3️⃣ Add NGINX Ingress Helm Repo
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+4️⃣ Install NGINX Ingress Controller
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace \
+  --set controller.replicaCount=2 \
+  --set controller.service.type=LoadBalancer \
+  --set controller.service.externalTrafficPolicy=Local
+
+5️⃣ Verify Installation
+Check pods: kubectl get pods -n ingress-nginx
+
+Check service: kubectl get svc -n ingress-nginx
+
+You should see: ingress-nginx-controller   LoadBalancer
+
+Get the ELB DNS: kubectl get svc ingress-nginx-controller -n ingress-nginx
+Copy the EXTERNAL-IP (ELB DNS).
+
+6️⃣ Create Application Ingress
+
+Example ingress.yaml:
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lfb-ingress
+  namespace: production
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lfb-service
+            port:
+              number: 80
+
+
+Apply: kubectl apply -f ingress.yaml
+
+7️⃣ Test Ingress
+
+If no domain configured: curl http://<ELB-DNS>
+
+If using host-based routing: curl -H "Host: yourdomain.com" http://<ELB-DNS>
+
+🏗 Architecture Overview
+Internet
+   ↓
+AWS ELB (created by ingress controller service)
+   ↓
+NGINX Ingress Controller
+   ↓
+Ingress Resource
+   ↓
+Service (ClusterIP)
+   ↓
+Pods
+
+8️⃣ Useful Commands
+
+Check all ingress resources: kubectl get ingress -A
+
+Describe ingress: kubectl describe ingress lfb-ingress -n production
+
+Check ingress controller logs: kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx
+
+9️⃣ Upgrade Ingress Controller (Future)
+helm upgrade ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx
+
+🔟 Uninstall (If Needed)
+helm uninstall ingress-nginx -n ingress-nginx
+kubectl delete namespace ingress-nginx
+
+✅ Best Practices
+Use single ingress controller per cluster
+Use namespaces for environment separation
+Use domain + Route53 in production
+Enable TLS (cert-manager) in production
+Use HPA for ingress controller in heavy traffic
