@@ -89,7 +89,7 @@ jobs:
             --namespace $NAMESPACE \
             --set image.tag=$IMAGE_TAG \
             --wait \
-            --timeout 3m
+            --timeout 3m \
             --atomic
 
 
