@@ -70,14 +70,26 @@ jobs:
             --region $AWS_REGION \
             --name $CLUSTER_NAME
 
-      - name: Inject image and deploy
+# use this when we need to use the seperate manifest instead of the helmchart
+      # - name: Inject image and deploy
+      #   run: |
+      #     IMAGE_URI="${{ needs.build.outputs.image_uri }}"
+
+      #     sed "s|IMAGE_PLACEHOLDER|$IMAGE_URI|g" k8s/deployment.yaml | kubectl apply -f -
+
+      #     kubectl apply -f k8s/service.yaml
+      #     kubectl apply -f k8s/ingress.yaml
+
+
+      - name: Deploy with Helm
         run: |
-          IMAGE_URI="${{ needs.build.outputs.image_uri }}"
+          IMAGE_TAG="${{ needs.build.outputs.image_tag }}"
 
-          sed "s|IMAGE_PLACEHOLDER|$IMAGE_URI|g" k8s/deployment.yaml | kubectl apply -f -
-
-          kubectl apply -f k8s/service.yaml
-          kubectl apply -f k8s/ingress.yaml
+          helm upgrade --install lfb ./helm/lfb \
+            --namespace $NAMESPACE \
+            --create-namespace \
+            --set image.repository=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY} \
+            --set image.tag=$IMAGE_TAG
 
       - name: Wait for rollout
         run: |

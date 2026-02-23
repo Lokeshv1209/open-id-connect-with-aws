@@ -1,0 +1,42 @@
+replicaCount: 2
+
+namespace: production
+
+image:
+  repository: 202279973546.dkr.ecr.us-east-1.amazonaws.com/demo/lfb
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 5000
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: ""
+      paths:
+        - path: /
+          pathType: Prefix
+
+resources:
+  requests:
+    cpu: "200m"
+    memory: "256Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+probes:
+  readiness:
+    path: /api/health
+    initialDelaySeconds: 10
+    periodSeconds: 5
+  liveness:
+    path: /api/health
+    initialDelaySeconds: 20
+    periodSeconds: 10
