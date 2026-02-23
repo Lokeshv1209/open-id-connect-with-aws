@@ -87,10 +87,27 @@ jobs:
 
           helm upgrade --install lfb ./helm/lfb \
             --namespace $NAMESPACE \
-            --create-namespace \
-            --set image.repository=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY} \
-            --set image.tag=$IMAGE_TAG
+            --set image.tag=$IMAGE_TAG \
+            --wait \
+            --timeout 3m
+            --atomic
 
-      - name: Wait for rollout
-        run: |
-          kubectl rollout status deployment/lfb -n $NAMESPACE --timeout=180s
+
+      # The rollout step below is NOT required when using:
+      #   helm upgrade --install ... --wait --timeout
+      #
+      # Helm's --wait flag already waits until:
+      # - Deployment is ready
+      # - Pods are in Ready state
+      # - ReplicaSets are available
+      #
+      # Use kubectl rollout status ONLY if:
+      # - You are deploying with kubectl apply (not Helm)
+      # - You want an additional explicit Deployment-level verification
+      # - You are debugging rollout issues separately
+      #
+      # If Helm --wait is enabled, this step is redundant and can be removed.
+
+      # - name: Wait for rollout
+      #   run: |
+      #     kubectl rollout status deployment/lfb -n $NAMESPACE --timeout=180s
