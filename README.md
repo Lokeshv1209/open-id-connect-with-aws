@@ -684,3 +684,202 @@ Use namespaces for environment separation
 Use domain + Route53 in production
 Enable TLS (cert-manager) in production
 Use HPA for ingress controller in heavy traffic
+
+
+
+
+
+
+
+**Migration Guide: From Raw Kubernetes Manifests to Helm Chart Deployment**
+Objective in the deployment pipeline
+
+Migrate application deployment from: kubectl apply -f k8s/*.yaml in the deployment pipeline
+
+To: helm upgrade --install With CI/CD automation via GitHub Actions.
+
+🏗 Previous Architecture (Raw Manifests)
+Deployment was managed using: 
+
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+kubectl apply -f k8s/ingress.yaml
+
+CI injected image tag using:
+
+sed "s|IMAGE_PLACEHOLDER|$IMAGE_URI|g"
+
+Limitations:
+No release history
+No rollback capability
+Manual templating
+Hardcoded YAML
+No environment flexibility
+
+
+🚀 Target Architecture (Helm-Based)
+Deployment is now managed via:
+
+helm upgrade --install lfb ./helm/lfb \
+  --namespace production \
+  --set image.tag=$IMAGE_TAG \
+  --wait \
+  --timeout 3m \
+  --atomic
+
+Benefits:
+Versioned releases
+Rollback support
+Parameterized values
+Clean CI integration
+Production-ready deployment model
+
+🛠 Step 1 — Create Helm Chart
+
+Inside repository:
+helm create helm/lfb
+
+This generates:
+helm/
+  lfb/
+    Chart.yaml
+    values.yaml
+    templates/
+🛠 Step 2 — Move Kubernetes YAML into Helm Templates
+
+Move logic from:
+k8s/deployment.yaml
+k8s/service.yaml
+k8s/ingress.yaml
+
+Into:
+helm/lfb/templates/
+🛠 Step 3 — Parameterize Deployment
+Example: deployment.yaml (Helm Template)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: lfb
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+
+🛠 Step 4 — Configure values.yaml
+namespace: production
+
+replicaCount: 2
+
+image:
+  repository: 202279973546.dkr.ecr.us-east-1.amazonaws.com/demo/lfb
+  tag: latest
+
+service:
+  port: 80
+  targetPort: 5000
+
+Now image tag is dynamically injected during CI.
+
+🛠 Step 5 — Remove Raw Manifests Deployment
+
+Delete from pipeline:
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+kubectl apply -f k8s/ingress.yaml
+Helm now manages everything.
+
+🔁 Step 6 — Clean Cluster Before Migration
+
+Since previous resources were created via kubectl, delete them:
+
+kubectl delete deployment lfb -n production
+kubectl delete service lfb-service -n production
+kubectl delete ingress lfb-ingress -n production
+
+Helm cannot take ownership of pre-existing resources without proper metadata.
+
+🔄 Step 7 — Update GitHub Actions Pipeline
+Old Deploy Method
+kubectl apply -f k8s/deployment.yaml
+kubectl rollout status deployment/lfb
+New Deploy Method (Helm-Based)
+- name: Deploy with Helm
+  run: |
+    IMAGE_TAG="${{ needs.build.outputs.image_tag }}"
+
+    helm upgrade --install lfb ./helm/lfb \
+      --namespace $NAMESPACE \
+      --set image.tag=$IMAGE_TAG \
+      --wait \
+      --timeout 3m \
+      --atomic
+🧠 Explanation of Helm Flags
+Flag	Purpose
+upgrade --install	Idempotent deployment
+--wait	Wait until pods ready
+--timeout	Deployment timeout
+--atomic	Auto rollback on failure
+🗂 Step 8 — Validate Deployment
+
+Check release: helm list -n production
+
+Check history: helm history lfb -n production
+
+Check resources: kubectl get all -n production
+
+🔄 Rollback Strategy
+If deployment fails: helm rollback lfb 1 -n production
+With --atomic, rollback happens automatically.
+
+🏗 Final Architecture
+GitHub Actions
+      |
+      v
+helm upgrade --install
+      |
+      v
+EKS API Server
+      |
+      v
+Deployment / Service / Ingress
+      |
+      v
+Pods Running
+
+Helm stores release metadata as Kubernetes secrets.
+
+🏆 Production Improvements Achieved
+
+✔ Version-controlled deployments
+✔ Release history
+✔ Rollback capability
+✔ Cleaner CI/CD
+✔ Parameterized configuration
+✔ Enterprise-grade deployment model
+
+🔐 Security Model
+
+Namespace created manually by cluster admin
+CI role does NOT create namespaces
+CI only manages app resources
+
+📌 Important Notes
+
+Do NOT mix kubectl apply with Helm for same resources
+Always use helm upgrade --install
+Use --atomic in production
+Keep values.yaml environment-specific if needed
+
