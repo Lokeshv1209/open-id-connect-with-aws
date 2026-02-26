@@ -3,7 +3,7 @@ name: Deploy Infra / Helm Changes
 on:
   push:
     branches:
-      - "*"
+      - "**"
     paths:
       - "infra/**"
       - "helm/**"
