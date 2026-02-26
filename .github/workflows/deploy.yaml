@@ -1,0 +1,51 @@
+name: Deploy Infra / Helm Changes
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/**"
+      - "helm/**"
+      - "k8s/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  CLUSTER_NAME: eks-cluster-oidc
+  NAMESPACE: production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::202279973546:role/GitHubActions-EKS-Autodeploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region $AWS_REGION \
+            --name $CLUSTER_NAME
+
+      - name: Apply ArgoCD Ingress
+        run: |
+          kubectl apply -f infra/argocd/ingress.yaml
+
+      - name: Deploy Helm Chart
+        run: |
+          helm upgrade --install lfb ./helm/lfb \
+            --namespace $NAMESPACE \
+            --wait \
+            --timeout 3m \
+            --atomic
