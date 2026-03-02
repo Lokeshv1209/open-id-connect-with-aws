@@ -883,3 +883,243 @@ Always use helm upgrade --install
 Use --atomic in production
 Keep values.yaml environment-specific if needed
 
+
+
+
+
+
+
+
+
+
+**Deploying the Argocd**
+
+complete structured documentation including:
+
+✅ ArgoCD via LoadBalancer (main access)
+✅ ArgoCD also exposed via NGINX Ingress (/argocd path) (as you shared)
+✅ App deployed via ArgoCD
+✅ All steps
+✅ Issues you faced
+✅ When to use which method
+This will be your final clean testing setup document.
+
+📘 EKS + ArgoCD (LoadBalancer + Ingress) + App via ArgoCD
+🏗 Final Testing Architecture
+
+You now effectively have two ways to access ArgoCD:
+Internet
+   │
+   ├── ELB #1 (NGINX Ingress Controller)
+   │        ├── /         → lfb app
+   │        └── /argocd   → ArgoCD (via Ingress)
+   │
+   └── ELB #2 (ArgoCD LoadBalancer Service)
+            └── ArgoCD UI (direct access)
+
+For testing:
+LoadBalancer = easiest & stable
+Ingress = Kubernetes-native routing
+
+1️⃣ Install ArgoCD (LoadBalancer)
+Step 1 — Create Namespace
+kubectl create namespace argocd
+Step 2 — Install via Helm (LoadBalancer)
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update
+
+helm install argocd argo/argo-cd \
+  --namespace argocd \
+  --set server.service.type=LoadBalancer
+
+This creates:
+kubectl get svc -n argocd
+
+You’ll see:
+argocd-server   LoadBalancer   <external-elb>
+
+Access via:
+https://<argocd-elb>
+⚠️ Must use HTTPS.
+
+2️⃣ Get Admin Password
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d
+
+Login:
+Username: admin
+Password: (decoded value)
+
+3️⃣ ArgoCD via NGINX Ingress (Your YAML)
+
+Since you are also using this ingress:
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-ingress
+  namespace: argocd
+  annotations:
+    # nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    # nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /argocd
+        pathType: Prefix
+        backend:
+          service:
+            name: argocd-server
+            port:
+              number: 80
+
+⚠️ Important Explanation
+
+Since ArgoCD is installed with default TLS enabled:
+argocd-server serves HTTPS on 443
+Service exposes 80 → redirects to 443 internally
+
+If you route via ingress to port 80:
+You may see:
+Redirect loops
+Blank white UI
+Mixed content errors
+
+4️⃣ Correct Way If Using Ingress + LoadBalancer Install
+
+If you want this ingress to work cleanly, do ONE of the following:
+
+OPTION A — Use HTTPS Backend (Recommended)
+Uncomment annotation:
+
+annotations:
+  nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+
+And change backend port:
+port:
+  number: 443
+
+Final version:
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-ingress
+  namespace: argocd
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /argocd
+        pathType: Prefix
+        backend:
+          service:
+            name: argocd-server
+            port:
+              number: 443
+
+Then access:
+http://<nginx-elb>/argocd
+OPTION B — Disable ArgoCD Internal TLS (Simpler for Testing)
+
+Reinstall or upgrade:
+helm upgrade argocd argo/argo-cd \
+  --namespace argocd \
+  --set server.service.type=LoadBalancer \
+  --set configs.params.server.insecure=true
+
+Then your ingress using port 80 works fine.
+
+5️⃣ Deploy Application via ArgoCD
+
+Create new app:
+General
+Name: lfb
+Project: default
+Auto Sync: Enabled
+Prune: Enabled
+Self Heal: Enabled
+
+Source
+Repo: your GitHub repo
+Branch: demo
+Path: helm/lfb
+Destination
+Cluster: https://kubernetes.default.svc
+Namespace: production
+Click Create.
+
+App should become:
+Healthy
+Synced
+
+6️⃣ CI → GitOps Flow
+
+Your GitHub Action:
+Build Docker image
+Push to ECR
+Update helm/lfb/values.yaml
+Commit change
+
+ArgoCD:
+Detects commit
+Syncs automatically
+Updates pods
+No manual Helm deploy needed anymore.
+
+7️⃣ Issues You Faced (Root Causes)
+❌ White Screen
+
+Cause:
+HTTPS backend mismatch
+Wrong service port
+Ingress rewrite issues
+
+Fix:
+Use correct backend protocol
+Match service port
+Or use LoadBalancer only
+
+❌ 404 Not Found
+Cause:
+Ingress not created in correct namespace
+Wrong ingressClassName
+
+❌ ImagePullBackOff
+Cause:
+Placeholder tag not replaced
+
+❌ Helm Ownership Error
+Cause:
+Resources created manually before Helm
+
+❌ Namespace Forbidden
+Cause:
+CI role lacked cluster-level permissions
+
+8️⃣ Which Method Should You Use?
+
+For testing:
+✔ LoadBalancer only (simplest)
+✔ Ignore ingress for ArgoCD
+
+For production:
+✔ Ingress
+✔ Domain
+✔ ACM certificate
+✔ No separate ELB
+
+🏁 Final State You Now Have
+You successfully built:
+EKS cluster
+NGINX ingress controller
+ArgoCD via LoadBalancer
+Optional ArgoCD via Ingress
+Helm-based application
+GitOps auto-sync
+CI → ECR → Git → ArgoCD pipeline
+This is a full modern GitOps platform.
+
